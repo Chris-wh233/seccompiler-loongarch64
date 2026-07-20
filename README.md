@@ -1,0 +1,1 @@
+# seccompiler-loongarch64
