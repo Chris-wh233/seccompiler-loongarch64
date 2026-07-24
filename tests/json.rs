@@ -12,6 +12,12 @@ use std::thread;
 
 const FAILURE_CODE: i32 = 1000;
 
+fn current_seccomp_level() -> i32 {
+    let level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
+    assert_ne!(level, -1);
+    level
+}
+
 enum Errno {
     Equals(i32),
     NotEquals(i32),
@@ -62,12 +68,10 @@ fn test_empty_filter_allow_all() {
     let filter = filters.remove("main_thread").unwrap();
     // This should allow any system calls.
     let pid = thread::spawn(move || {
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        current_seccomp_level();
         // Install the filter.
         apply_filter(&filter).unwrap();
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 2);
+        assert_eq!(current_seccomp_level(), 2);
         unsafe { libc::getpid() }
     })
     .join()
@@ -95,8 +99,7 @@ fn test_empty_filter_deny_all() {
 
     match pid {
         0 => {
-            let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-            assert_eq!(seccomp_level, 0);
+            current_seccomp_level();
             // Install the filter.
             apply_filter(&filter).unwrap();
             // this syscall will fail

@@ -39,6 +39,12 @@ const EXTRA_SYSCALLS: [i64; 6] = [
     libc::SYS_futex,
 ];
 
+fn current_seccomp_level() -> i32 {
+    let level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
+    assert_ne!(level, -1);
+    level
+}
+
 enum Errno {
     Equals(i32),
     NotEquals(i32),
@@ -103,13 +109,11 @@ fn test_empty_filter() {
 
     // This should allow any system calls.
     let pid = thread::spawn(move || {
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        current_seccomp_level();
         // Install the filter.
         apply_filter(&prog).unwrap();
 
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 2);
+        assert_eq!(current_seccomp_level(), 2);
 
         unsafe { libc::getpid() }
     })
@@ -726,17 +730,15 @@ fn test_filter_apply() {
 
         assert_eq!(filter.len(), 0);
 
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        let initial_seccomp_level = current_seccomp_level();
 
         assert!(matches!(
             apply_filter(&filter).unwrap_err(),
             Error::EmptyFilter
         ));
 
-        // test that seccomp level remains 0 on failure.
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        // test that seccomp level remains unchanged on failure.
+        assert_eq!(current_seccomp_level(), initial_seccomp_level);
     })
     .join()
     .unwrap();
@@ -751,17 +753,15 @@ fn test_filter_apply() {
             k: 0,
         }];
 
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        let initial_seccomp_level = current_seccomp_level();
 
         assert!(matches!(
             apply_filter(&filter).unwrap_err(),
             Error::Seccomp(_)
         ));
 
-        // test that seccomp level remains 0 on failure.
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        // test that seccomp level remains unchanged on failure.
+        assert_eq!(current_seccomp_level(), initial_seccomp_level);
     })
     .join()
     .unwrap();
@@ -777,14 +777,12 @@ fn test_filter_apply() {
         .unwrap();
         let prog: BpfProgram = filter.try_into().unwrap();
 
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 0);
+        current_seccomp_level();
 
         apply_filter(&prog).unwrap();
 
         // test that seccomp level is 2 (SECCOMP_MODE_FILTER).
-        let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
-        assert_eq!(seccomp_level, 2);
+        assert_eq!(current_seccomp_level(), 2);
     })
     .join()
     .unwrap();
